@@ -1,4 +1,12 @@
 .env
 /logs
 *.log
-
+*.png
+data.dat
+test.py
+tempCodeRunnerFile.py
+img.png
+./log_images
+TODO
+.vscode/settings.json
+tempCodeRunnerFile.py
