@@ -18,6 +18,7 @@ intent.members = True
 client = discord.Client(intents=intent)
 tree = app_commands.CommandTree(client)
 out_msg = None
+nsfw_channels = [1089087674066940027, 1118874768423264368, 1122044968605859891, 1129201326660780155, 1133399681649623091, 1133398633279127623]
 log = []
 timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 isCreating = False
@@ -46,13 +47,25 @@ async def on_ready():
       else:
         user_timeouts[str(member.id)] = int(datetime.datetime.now().strftime('%H%M%S'))
   print(f"{member_count=}")
-  
+@client.event
+async def on_member_join(member):
+  global user_timeouts
+  if str(member.id) not in user_timeouts.items():
+    user_timeouts[str(member.id)] = int(datetime.datetime.now().strftime('%H%M%S'))
 
 @tree.command(name="img-normal",description="東方キャラの画像を出力します。")
 async def img_command(interaction: discord.Interaction, character: chara = 'Flandre Scarlet', model_name : model = 'yden_v30'):
     global user_timeouts
     global loop
 
+    try:
+      if user_timeouts[str(interaction.user.id)] is None:
+        return
+    except KeyError:
+      embed = discord.Embed(title=':warning: ERROR', description='Botの起動中もしくはKeyが追加されていません。もしBotの起動中でない場合は、 @0266stにDMもしくはサポートサーバでバグ報告を行なってください。', color=0xFFFF00)
+      interaction.response.send_message(embed=embed)
+      return
+    
     print(str(str(user_timeouts[str(interaction.user.id)]) + ' >= ' + str(datetime.datetime.now().strftime('%H%M%S'))))
     
     if user_timeouts[str(interaction.user.id)] >= int(datetime.datetime.now().strftime('%H%M%S')) and user_timeouts[str(interaction.user.id)] >= 0:
@@ -74,22 +87,29 @@ async def img_command(interaction: discord.Interaction, character: chara = 'Flan
 async def nsfw_img_command(interaction: discord.Interaction, character : chara = 'Flandre Scarlet', model_name : model = 'yden_v30'):
     
     global user_timeouts
+    try:
+      if user_timeouts[str(interaction.user.id)] is None:
+        return
+    except KeyError:
+      embed = discord.Embed(title=':warning: ERROR', description='Botの起動中もしくはKeyが追加されていません。もしBotの起動中でない場合は、 @0266stにDMもしくはサポートサーバでバグ報告を行なってください。', color=0xFFFF00)
+      interaction.response.send_message(embed=embed)
+      return
     
-    print(user_timeouts[str(interaction.user.id)] + ' >= ' + str(datetime.datetime.now().strftime('%H%M%S')))
+    print(str(user_timeouts[str(interaction.user.id)]) + ' >= ' + str(datetime.datetime.now().strftime('%H%M%S')))
     
     if user_timeouts[str(interaction.user.id)] >= int(datetime.datetime.now().strftime('%H%M%S')) and user_timeouts[str(interaction.user.id)] >= 0:
       msg_embed = discord.Embed(title=":warning: ERROR", description="You can't create image. please retry at 10 seconds after or upgrade your plan.", color=0xFF0000)
-      msg_embed.set_footer(text='Request from ' + interaction.user.id)
+      msg_embed.set_footer(text='Request from ' + interaction.user.name)
       await interaction.response.send_message(embed=msg_embed, ephemeral=True)
       return
     
     await interaction.response.defer()
     
     try:
-      if interaction.channel_id == 1089087674066940027 or interaction.channel.is_nsfw == True or interaction.channel_id == 1118874768423264368 or interaction.channel_id == 1122044968605859891 or interaction.channel_id == 1129201326660780155:
+      if interaction.channel_id in nsfw_channels:
         msg_embed = discord.Embed(title='Bot is creating **NSFW** image...', description='Waiting in the queue... please wait', color= 0x0000ff)
-        msg_embed.set_footer(text=str('Request from ' + interaction.user.id))
-        out_msg = await interaction.channel.send(embed=msg_embed)
+        msg_embed.set_footer(text=str('Request from ' + interaction.user.name))
+        out_msg = await interaction.followup.send(embed=msg_embed)
         await get_img(interaction, True, character, model_name, out_msg)
       
       else:
@@ -158,7 +178,7 @@ async def get_img(interaction : discord.Interaction, nsfw : bool, character : ch
         global log
         global timestamp
         global user_timeouts
-        
+        await out_msg.channel.typing()
         if nsfw == True:
           params = {
             "restore_faces": False,
@@ -181,7 +201,7 @@ async def get_img(interaction : discord.Interaction, nsfw : bool, character : ch
             "base_size": 512,
             "max_size": 768,
             "tiling": False,
-            "highres_fix": False,
+            "highres_fix": 'enable_hr',
             "firstphase_height": 512,
             "firstphase_width": 512,
             "upscaler_name": "None",
@@ -229,6 +249,11 @@ async def get_img(interaction : discord.Interaction, nsfw : bool, character : ch
         
         r = await post_data('http://127.0.0.1:7860/sdapi/v1/txt2img', params)
         
+        if r['ERROR'] is True:
+          msg_embed = discord.Embed(':warning: An internal Error has Occureted.', description='Failed to request Stable Diffusion WebUI API. Please pass to the author.', color=0xFF0000)
+          out_msg.edit(embed=msg_embed)
+          return
+
         info_json = r["info"]
         with open("./test.json", "w") as file:
           file.write(info_json)
@@ -270,8 +295,14 @@ def ispaidUser(target):
 
 async def post_data(url, data):
     async with aiohttp.ClientSession() as session:
+      try:
         async with session.post(url, json=data) as response:
-            return await response.json()
-
+          return_dict = await response.json()
+          return_dict['ERROR'] = False
+          return return_dict
+      except:
+        return_dict = []
+        return_dict['ERROR'] = True
+        return return_dict
 
 client.run(os.environ["TOKEN"])
